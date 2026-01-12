@@ -1,0 +1,3 @@
+- Azure pagination issue
+  - Currently to produce paginated response we need the total count of applications matching the query.
+  - However, Azure SDK does not provide a direct way to get the total count of subscriptions so we are counting them in a for loop. Need to change it to cache michanism or something else

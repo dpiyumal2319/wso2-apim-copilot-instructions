@@ -1,6 +1,24 @@
 # Implementing Application Discovery in WSO2 APIM
 
-[]: # - **Basic Objects**: Implement `FederatedApplicationDiscovery` and `DiscoveredApplication` Classes.
+## 🎯 Executive Summary
+
+**Project Goal:** Enable discovery and import of external gateway applications (Azure APIM Subscriptions, AWS API Gateway Usage Plans) into WSO2 APIM for brownfield migration scenarios.
+
+**Current Status:** 🟢 **~40% Complete - Foundation Ready**
+
+**Architecture Decision:** ✅ Create **AM_APPLICATION_EXTERNAL_MAPPING** table (follows API discovery pattern)
+- ❌ NOT using AM_APPLICATION_KEY_MAPPING.APP_INFO (OAuth semantics wrong)
+- ❌ NOT using Application.applicationAttributes (no foreign keys, limited structure)
+- ✅ NEW dedicated table for clean separation, multi-gateway support, and referential integrity
+
+**Key Insight:** WSO2's API Discovery feature uses AM_API_EXTERNAL_API_MAPPING table. We follow the same proven pattern for applications.
+
+📚 **Documentation:**
+- **ANALYSIS.md** - Deep architectural analysis and decision rationale
+- **NEXT_STEPS.md** - Implementation guide with code templates
+- **AZURE_IMPLEMENTATION.md** - Complete Azure connector documentation
+
+---
 
 ## Basic Objects
 
@@ -29,13 +47,21 @@ This plan establishes the foundational interfaces, models, and patterns for disc
 
 - [x] **Add getApplicationDiscoveryImplementation to GatewayAgentConfiguration** — Register application discovery implementations in gateway configuration.
 
-- [ ] Add DAO methods for external mapping persistence — In ApiMgtDAO.java, implement addApplicationExternalMapping, getApplicationExternalMappingByAppId, updateApplicationExternalMapping, deleteApplicationExternalMapping following patterns from addApiExternalApiMapping family of methods.
+- [ ] **Create SQL migration scripts for AM_APPLICATION_EXTERNAL_MAPPING** — Following AM_API_EXTERNAL_API_MAPPING pattern, create table with columns: APPLICATION_UUID (FK to AM_APPLICATION), GATEWAY_ENV_ID (FK to AM_GATEWAY_ENVIRONMENT), EXTERNAL_APP_ID, REFERENCE_ARTIFACT (LONGBLOB for JSON), CREATED_TIME, LAST_UPDATED_TIME. Add scripts to h2.sql, mysql5.7.sql, postgresql.sql, oracle.sql, mssql.sql.
 
-- [ ] Create DiscoveredApplication DTO and mapping utilities — Add DiscoveredApplicationDTO, DiscoveredApplicationListDTO in org.wso2.carbon.apimgt.rest.api.store.v1.dto, and create DiscoveredApplicationMappingUtil in mappings package with methods for domain-to-DTO conversion following ApplicationMappingUtil patterns.
+- [ ] **Add SQL constants to SQLConstants.java** — Define ADD_APPLICATION_EXTERNAL_MAPPING_SQL, GET_APPLICATION_EXTERNAL_MAPPING_SQL, UPDATE_APPLICATION_EXTERNAL_MAPPING_SQL, DELETE_APPLICATION_EXTERNAL_MAPPING_SQL, GET_APPLICATION_EXTERNAL_MAPPINGS_SQL following patterns from API external mapping constants (~line 2820).
 
-- [ ] Define REST API specification — In OpenAPI spec for store API, add /environments/{environmentId}/discovered-applications GET endpoint with pagination params (offset, limit, query), and /discovered-applications/import POST endpoint accepting referenceArtifact following patterns from ApplicationsApiServiceImpl.java:126-198.
+- [ ] **Implement DAO methods in ApiMgtDAO.java** — Add addApplicationExternalMapping(uuid, envId, externalAppId, referenceArtifact), getApplicationExternalMapping(uuid, envId), updateApplicationExternalMapping(...), deleteApplicationExternalMapping(...), getApplicationExternalMappings(uuid) following patterns from addApiExternalApiMapping (~line 16238).
 
-- [ ] Implement agent factory and loader — Create FederatedApplicationDiscoveryFactory in federated.gateway package to dynamically load agent implementations based on Environment.java gatewayType using reflection pattern from FederatedAPIDiscovery.
+- [ ] **Create DiscoveredApplication DTOs** — In org.wso2.carbon.apimgt.rest.api.store.v1.dto, add DiscoveredApplicationDTO (fields: externalId, name, description, tier, owner, createdTime, attributes, keyInfoList, alreadyImported, importedApplicationId), DiscoveredApplicationKeyInfoDTO, DiscoveredApplicationListDTO (with pagination).
+
+- [ ] **Create DiscoveredApplicationMappingUtil** — In org.wso2.carbon.apimgt.rest.api.store.v1.mappings, implement fromDiscoveredApplicationToDTO(), fromDiscoveredApplicationListToDTO() following patterns in ApplicationMappingUtil.
+
+- [ ] **Define REST API specification in store-api.yaml** — Add endpoints: `GET /environments/{environmentId}/discovered-applications` (query params: offset, limit, query), `POST /discovered-applications/import` (body: referenceArtifact JSON, environmentId). Follow patterns from /applications endpoints.
+
+- [ ] **Implement REST service handlers** — In ApplicationsApiServiceImpl.java, add discoverApplications() and importDiscoveredApplication() methods. Discovery calls FederatedApplicationDiscoveryFactory to get agent, import creates Application + ApplicationExternalMapping entries.
+
+- [ ] **Create FederatedApplicationDiscoveryFactory** — In org.wso2.carbon.apimgt.impl.federated.gateway, implement factory with loadAgent(Environment env) method using reflection to instantiate azure/aws/other discovery agents based on gatewayType.
 
 ### Files Created/Modified
 
@@ -49,11 +75,13 @@ This plan establishes the foundational interfaces, models, and patterns for disc
 
 ### Further Considerations
 
-- **Database schema approval** — Should we create AM_APPLICATION_EXTERNAL_MAPPING table now or defer until vendor implementation phase? Recommend creating schema early for clean separation. SQL migration script needed for h2.sql, mssql.sql, mysql5.7.sql, oracle.sql, postgresql.sql.
+- **Database schema decision** ✅ — **DECISION: Create AM_APPLICATION_EXTERNAL_MAPPING table.** Analysis shows this follows the exact pattern used for API discovery (AM_API_EXTERNAL_API_MAPPING). While AM_APPLICATION_KEY_MAPPING.APP_INFO could technically store external references, it overloads semantic meaning and lacks proper foreign keys to gateway environments. Separate table provides clean separation, referential integrity, multi-gateway support, and architectural consistency. See ANALYSIS.md for full rationale.
 
-- **Credential security strategy** — For the referenceArtifact JSON, include external credential ID (never the actual key/secret) and masked display names (e.g., "Primary Key: •••••abc"). Actual credential values only retrieved during import via agent's dedicated method. Should we add retrieveCredential(externalId) to FederatedApplicationDiscovery interface?
+- **Brownfield key storage strategy** — For Azure brownfield scenarios, REFERENCE_ARTIFACT stores only key references/IDs (never actual secrets). WSO2 generates NEW keys for API subscriptions. Azure keys stay in Azure, fetched on-demand if needed via agent's retrieveCredential() method. AM_APPLICATION_KEY_MAPPING not used for brownfield imports, only for WSO2-generated keys.
 
-- **Pagination optimization** — Discovery agents should use native gateway pagination (offset/limit forwarding) to avoid loading large datasets. The interface now supports both getTotalApplicationCount() for accurate counts and hasMore pattern via DiscoveredApplicationResult.
+- **No modifications to AM_APPLICATION table needed** — Unlike AM_API which has GATEWAY_VENDOR and INITIATED_FROM_GW columns, Applications don't need these flags. The presence of a record in AM_APPLICATION_EXTERNAL_MAPPING table is sufficient to identify imported applications. Application.applicationAttributes can store additional metadata if needed.
+
+- **Pagination optimization** — Discovery agents use native gateway pagination (offset/limit forwarding) to avoid loading large datasets. The interface supports both getTotalApplicationCount() for accurate counts and hasMore pattern via DiscoveredApplicationResult.
 
 ---
 

@@ -10,4 +10,4 @@
 * Use java design patterns and est practices wherever applicable.
 
 ## Project files
-* All dependancy repos are in ` wso2-apim-apps  wso2-apim-gw-connectors  wso2-carbon-apimgt  wso2-product-apim` Eg Carbon.
+* TODO.md is not for you. It's for me.

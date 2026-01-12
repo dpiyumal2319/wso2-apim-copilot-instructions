@@ -10,8 +10,7 @@ The solution uses a **Pull-Based Discovery Model**  to fetch entities from the e
 
 ### Core Components
 
-1.
-**Federation Agent**: A gateway-specific component (e.g., `AzureApplicationDiscovery`) that queries the external API.
+1. **Federation Agent**: A gateway-specific component (e.g., `AzureApplicationDiscovery`) that queries the external API.
 
 
 2. **Resource Data Store**: Optimizes performance by batching policy/tier lookups to solve N+1 query problems.
