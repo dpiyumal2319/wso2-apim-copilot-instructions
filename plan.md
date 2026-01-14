@@ -47,11 +47,11 @@ This plan establishes the foundational interfaces, models, and patterns for disc
 
 - [x] **Add getApplicationDiscoveryImplementation to GatewayAgentConfiguration** — Register application discovery implementations in gateway configuration.
 
-- [ ] **Create SQL migration scripts for AM_APPLICATION_EXTERNAL_MAPPING** — Following AM_API_EXTERNAL_API_MAPPING pattern, create table with columns: APPLICATION_UUID (FK to AM_APPLICATION), GATEWAY_ENV_ID (FK to AM_GATEWAY_ENVIRONMENT), EXTERNAL_APP_ID, REFERENCE_ARTIFACT (LONGBLOB for JSON), CREATED_TIME, LAST_UPDATED_TIME. Add scripts to h2.sql, mysql5.7.sql, postgresql.sql, oracle.sql, mssql.sql.
+- [x] **Create SQL migration scripts for AM_APPLICATION_EXTERNAL_MAPPING** — Following AM_API_EXTERNAL_API_MAPPING pattern, create table with columns: APPLICATION_UUID (FK to AM_APPLICATION), GATEWAY_ENV_ID (FK to AM_GATEWAY_ENVIRONMENT), EXTERNAL_APP_ID, REFERENCE_ARTIFACT (LONGBLOB for JSON), CREATED_TIME, LAST_UPDATED_TIME. Add scripts to h2.sql, mysql5.7.sql, postgresql.sql, oracle.sql, mssql.sql.
 
-- [ ] **Add SQL constants to SQLConstants.java** — Define ADD_APPLICATION_EXTERNAL_MAPPING_SQL, GET_APPLICATION_EXTERNAL_MAPPING_SQL, UPDATE_APPLICATION_EXTERNAL_MAPPING_SQL, DELETE_APPLICATION_EXTERNAL_MAPPING_SQL, GET_APPLICATION_EXTERNAL_MAPPINGS_SQL following patterns from API external mapping constants (~line 2820).
+- [x] **Add SQL constants to SQLConstants.java** — Define ADD_APPLICATION_EXTERNAL_MAPPING_SQL, GET_APPLICATION_EXTERNAL_MAPPING_SQL, UPDATE_APPLICATION_EXTERNAL_MAPPING_SQL, DELETE_APPLICATION_EXTERNAL_MAPPING_SQL, GET_APPLICATION_EXTERNAL_MAPPINGS_SQL following patterns from API external mapping constants (~line 2820).
 
-- [ ] **Implement DAO methods in ApiMgtDAO.java** — Add addApplicationExternalMapping(uuid, envId, externalAppId, referenceArtifact), getApplicationExternalMapping(uuid, envId), updateApplicationExternalMapping(...), deleteApplicationExternalMapping(...), getApplicationExternalMappings(uuid) following patterns from addApiExternalApiMapping (~line 16238).
+- [x] **Implement DAO methods in ApiMgtDAO.java** — Add addApplicationExternalMapping(uuid, envId, externalAppId, referenceArtifact), getApplicationExternalMapping(uuid, envId), updateApplicationExternalMapping(...), deleteApplicationExternalMapping(...), getApplicationExternalMappings(uuid) following patterns from addApiExternalApiMapping (~line 16238).
 
 - [ ] **Create DiscoveredApplication DTOs** — In org.wso2.carbon.apimgt.rest.api.store.v1.dto, add DiscoveredApplicationDTO (fields: externalId, name, description, tier, owner, createdTime, attributes, keyInfoList, alreadyImported, importedApplicationId), DiscoveredApplicationKeyInfoDTO, DiscoveredApplicationListDTO (with pagination).
 
