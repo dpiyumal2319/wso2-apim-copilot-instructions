@@ -53,15 +53,15 @@ This plan establishes the foundational interfaces, models, and patterns for disc
 
 - [x] **Implement DAO methods in ApiMgtDAO.java** — Add addApplicationExternalMapping(uuid, envId, externalAppId, referenceArtifact), getApplicationExternalMapping(uuid, envId), updateApplicationExternalMapping(...), deleteApplicationExternalMapping(...), getApplicationExternalMappings(uuid) following patterns from addApiExternalApiMapping (~line 16238).
 
-- [ ] **Create DiscoveredApplication DTOs** — In org.wso2.carbon.apimgt.rest.api.store.v1.dto, add DiscoveredApplicationDTO (fields: externalId, name, description, tier, owner, createdTime, attributes, keyInfoList, alreadyImported, importedApplicationId), DiscoveredApplicationKeyInfoDTO, DiscoveredApplicationListDTO (with pagination).
+- [x] **Create DiscoveredApplication DTOs** — In org.wso2.carbon.apimgt.rest.api.store.v1.dto, add DiscoveredApplicationDTO (fields: externalId, name, description, tier, owner, createdTime, attributes, keyInfoList, alreadyImported, importedApplicationId), DiscoveredApplicationKeyInfoDTO, DiscoveredApplicationListDTO (with pagination).
 
-- [ ] **Create DiscoveredApplicationMappingUtil** — In org.wso2.carbon.apimgt.rest.api.store.v1.mappings, implement fromDiscoveredApplicationToDTO(), fromDiscoveredApplicationListToDTO() following patterns in ApplicationMappingUtil.
+- [x] **Create DiscoveredApplicationMappingUtil** — In org.wso2.carbon.apimgt.rest.api.store.v1.mappings, implement fromDiscoveredApplicationToDTO(), fromDiscoveredApplicationListToDTO() following patterns in ApplicationMappingUtil.
 
-- [ ] **Define REST API specification in store-api.yaml** — Add endpoints: `GET /environments/{environmentId}/discovered-applications` (query params: offset, limit, query), `POST /discovered-applications/import` (body: referenceArtifact JSON, environmentId). Follow patterns from /applications endpoints.
+- [x] **Define REST API specification in store-api.yaml** — Add endpoints: `GET /environments/{environmentId}/discovered-applications` (query params: offset, limit, query), `POST /discovered-applications/import` (body: referenceArtifact JSON, environmentId). Follow patterns from /applications endpoints.
 
-- [ ] **Implement REST service handlers** — In ApplicationsApiServiceImpl.java, add discoverApplications() and importDiscoveredApplication() methods. Discovery calls FederatedApplicationDiscoveryFactory to get agent, import creates Application + ApplicationExternalMapping entries.
+- [x] **Implement REST service handlers** — In ApplicationsApiServiceImpl.java, add discoverApplications() and importDiscoveredApplication() methods. Discovery calls FederatedApplicationDiscoveryFactory to get agent, import creates Application + ApplicationExternalMapping entries.
 
-- [ ] **Create FederatedApplicationDiscoveryFactory** — In org.wso2.carbon.apimgt.impl.federated.gateway, implement factory with loadAgent(Environment env) method using reflection to instantiate azure/aws/other discovery agents based on gatewayType.
+- [x] **Create FederatedApplicationDiscoveryFactory** — In org.wso2.carbon.apimgt.impl.federated.gateway, implement factory with loadAgent(Environment env) method using reflection to instantiate azure/aws/other discovery agents based on gatewayType.
 
 ### Files Created/Modified
 
