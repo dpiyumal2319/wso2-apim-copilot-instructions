@@ -1,6 +1,6 @@
-# CLAUDE.md - Universal Gateway Implementation Guide
+# CLAUDE.md - Universal DevPortal Implementation Guide
 
-This document is for **Claude Code AI assistant**. It contains implementation details, code patterns, and flow information for the Universal Gateway subscription management feature.
+This document is for **Claude Code AI assistant**. It contains implementation details, code patterns, and flow information for the Universal DevPortal subscription management feature.
 
 ---
 
@@ -77,9 +77,13 @@ wso2-apim-gw-connectors/               # Gateway connectors
   - `retrieveCredential(String externalId)` - Retrieve full credential (optional)
 
 **Models:**
-- `FederatedCredential` - Credential metadata (type, value, timestamps)
+- `FederatedCredential` - Opaque credential container with `body` (JSON string), `externalSubscriptionId`, `valueRetrievable`, `masked`. The body structure is connector-specific; backend never parses it.
 - `FederatedSubscriptionRequest` - Subscription creation request
-- `InvocationInstruction` - How to invoke the API (headers, URLs)
+- `InvocationInstruction` - Opaque invocation container with `body` (JSON string). Structure is connector-specific; backend never parses it.
+
+**GatewayFeatureCatalog.json** (in each connector):
+- `federatedSubscription.credentialSchema` - Identifies the credential type for frontend rendering (e.g., `opaque-api-key`, `jwt-bearer`)
+- `federatedSubscription.invocationSchema` - Identifies the invocation pattern for frontend rendering (e.g., `header-based`, `header-with-query-fallback`, `aws-signature`)
 
 ### Database
 
@@ -188,57 +192,65 @@ public class FederatedSubscriptionAgentFactory {
 - Credentials decrypted via `APIAdminImpl.decryptGatewayConfigurationValues()`
 - Reflection-based instantiation from `GatewayAgentConfiguration`
 
-### 2. Credential Visibility Strategy
+### 2. Opaque Body Pattern
 
-**Pattern:**
-- **CREATE/REGENERATE:** Return full key (one-time display)
-- **GET:** Return masked key (`••••••••ab12`)
+**FederatedCredential** and **InvocationInstruction** carry opaque `String body` fields (JSON). The backend never parses these bodies — only the connector (producer) and frontend (consumer) understand the structure.
+
+**Credential Visibility:**
+- **CREATE/REGENERATE:** Body contains full credential value (`masked = false`)
+- **GET (from reference artifact):** Body contains masked credential (`masked = true`)
 
 **Implementation:**
 ```java
-// On CREATE - return full key
+// On CREATE - connector builds body with full value
+JsonObject credBody = new JsonObject();
+credBody.addProperty("credentialType", CREDENTIAL_TYPE);
+credBody.addProperty("value", keys.primaryKey());       // Full value!
+credBody.addProperty("headerName", HEADER_NAME);
+credBody.addProperty("createdTime", timestamp);
+
 FederatedCredential credential = new FederatedCredential();
-credential.setCredentialValue(fullKeyValue);  // Full value!
+credential.setBody(gson.toJson(credBody));               // Opaque JSON string
+credential.setExternalSubscriptionId(subscription.name());
+credential.setValueRetrievable(true);
 credential.setMasked(false);
 
-// On GET - return masked
-String maskedValue = maskCredential(fullKeyValue);  // "••••••••ab12"
-credential.setCredentialValue(maskedValue);
+// On GET - connector extracts masked body from reference artifact
+credential.setBody(maskedBodyJson);
 credential.setMasked(true);
 
-// Masking function (8 bullets + last 4 chars)
-protected String maskCredential(String credentialValue) {
-    if (credentialValue == null || credentialValue.isEmpty()) {
-        return credentialValue;
-    }
-    int length = credentialValue.length();
-    int visibleChars = 4;
-    if (length <= visibleChars) {
-        return "•".repeat(length);
-    }
-    int maskLength = Math.min(8, length - visibleChars);
-    return "•".repeat(maskLength) + credentialValue.substring(length - visibleChars);
-}
+// Masking function (8 bullets + last 4 chars) — stays in connector
+protected String maskCredential(String credentialValue) { ... }
 ```
+
+**InvocationInstruction:**
+```java
+JsonObject invBody = new JsonObject();
+invBody.addProperty("headerName", HEADER_NAME);
+invBody.addProperty("baseUrl", baseUrl);
+invBody.addProperty("basePath", basePath);
+invBody.addProperty("curlExample", curlExample);
+invBody.addProperty("notes", notes);
+
+InvocationInstruction instruction = new InvocationInstruction();
+instruction.setBody(gson.toJson(invBody));  // Opaque JSON string
+```
+
+**Frontend Rendering:** The frontend reads `federatedSubscription.credentialSchema` and `federatedSubscription.invocationSchema` from GatewayFeatureCatalog to select the appropriate renderer component.
 
 ### 3. Reference Artifact Pattern
 
-**Design:** Each connector owns its reference artifact format.
+**Design:** Each connector owns its reference artifact format. The body fields are stored as nested JSON strings within the artifact.
 
 **Artifact Structure (JSON in LONGBLOB):**
 ```json
 {
   "credential": {
-    "credentialType": "opaque-api-key",
-    "maskedValue": "••••••••ab12",
+    "body": "{\"credentialType\":\"opaque-api-key\",\"value\":\"••••••••ab12\",\"headerName\":\"Ocp-Apim-Subscription-Key\",\"createdTime\":\"2025-01-30T...\"}",
     "isValueRetrievable": true
   },
   "invocationInstruction": {
-    "gatewayType": "Azure",
-    "headerName": "Ocp-Apim-Subscription-Key",
-    "basePath": "/api/v1",
-    "curlExample": "curl -H 'Ocp-Apim-Subscription-Key: YOUR_KEY' ...",
-    "notes": "You can also pass via query param: subscription-key"
+    "body": "{\"headerName\":\"Ocp-Apim-Subscription-Key\",\"baseUrl\":\"https://...\",\"basePath\":\"/api/v1\",\"curlExample\":\"curl ...\",\"notes\":\"...\"}"
   }
 }
 ```
@@ -248,27 +260,23 @@ protected String maskCredential(String credentialValue) {
 @Override
 public String buildSubscriptionReferenceArtifact(
         FederatedCredential credential, InvocationInstruction instruction) {
-
     JsonObject json = new JsonObject();
-
-    if (credential != null) {
-        JsonObject credJson = new JsonObject();
-        credJson.addProperty("credentialType", credential.getCredentialType());
-        credJson.addProperty("maskedValue", maskCredential(credential.getCredentialValue()));
-        credJson.addProperty("isValueRetrievable", credential.isValueRetrievable());
-        json.add("credential", credJson);
+    if (credential != null && credential.getBody() != null) {
+        // Parse body, mask the value, re-serialize
+        JsonObject credBody = JsonParser.parseString(credential.getBody()).getAsJsonObject();
+        if (credBody.has("value")) {
+            credBody.addProperty("value", maskCredential(credBody.get("value").getAsString()));
+        }
+        JsonObject maskedCred = new JsonObject();
+        maskedCred.addProperty("body", gson.toJson(credBody));
+        maskedCred.addProperty("isValueRetrievable", credential.isValueRetrievable());
+        json.add("credential", maskedCred);
     }
-
-    if (instruction != null) {
-        JsonObject instrJson = new JsonObject();
-        instrJson.addProperty("gatewayType", instruction.getGatewayType());
-        instrJson.addProperty("headerName", instruction.getHeaderName());
-        instrJson.addProperty("basePath", instruction.getBasePath());
-        instrJson.addProperty("curlExample", instruction.getCurlExample());
-        instrJson.addProperty("notes", instruction.getNotes());
-        json.add("invocationInstruction", instrJson);
+    if (instruction != null && instruction.getBody() != null) {
+        JsonObject invJson = new JsonObject();
+        invJson.addProperty("body", instruction.getBody());
+        json.add("invocationInstruction", invJson);
     }
-
     return json.toString();
 }
 ```
@@ -278,34 +286,20 @@ public String buildSubscriptionReferenceArtifact(
 @Override
 public FederatedCredential extractCredentialFromReferenceArtifact(
         String subscriptionReferenceArtifact) {
-
     FederatedCredential credential = new FederatedCredential();
-    if (subscriptionReferenceArtifact == null || subscriptionReferenceArtifact.isEmpty()) {
-        return credential;
-    }
-
+    if (subscriptionReferenceArtifact == null) return credential;
     try {
-        JsonObject json = JsonParser.parseString(subscriptionReferenceArtifact)
-            .getAsJsonObject();
-        JsonObject credJson = json.has("credential")
-            ? json.getAsJsonObject("credential") : null;
-
+        JsonObject json = JsonParser.parseString(subscriptionReferenceArtifact).getAsJsonObject();
+        JsonObject credJson = json.has("credential") ? json.getAsJsonObject("credential") : null;
         if (credJson != null) {
-            if (credJson.has("credentialType")) {
-                credential.setCredentialType(credJson.get("credentialType").getAsString());
-            }
-            if (credJson.has("maskedValue")) {
-                credential.setCredentialValue(credJson.get("maskedValue").getAsString());
-            }
-            if (credJson.has("isValueRetrievable")) {
-                credential.setValueRetrievable(
-                    credJson.get("isValueRetrievable").getAsBoolean());
-            }
+            if (credJson.has("body")) credential.setBody(credJson.get("body").getAsString());
+            if (credJson.has("isValueRetrievable"))
+                credential.setValueRetrievable(credJson.get("isValueRetrievable").getAsBoolean());
+            credential.setMasked(true);
         }
     } catch (JsonSyntaxException e) {
         log.warn("Failed to parse subscription reference artifact", e);
     }
-
     return credential;
 }
 ```
@@ -417,13 +411,9 @@ public Response createFederatedSubscription(String subscriptionId,
         subscriptionId, gatewayEnvId,
         credential.getExternalSubscriptionId(), subscriptionRefArtifact);
 
-    // 9. Build DTO and return (full credential!)
-    FederatedSubscriptionInfoDTO dto = new FederatedSubscriptionInfoDTO();
-    dto.setGatewayEnvironmentId(gatewayEnvId);
-    dto.setGatewayType(agent.getGatewayType());
-    dto.setExternalSubscriptionId(credential.getExternalSubscriptionId());
-    dto.setCredential(SubscriptionMappingUtil.toFederatedCredentialDTO(credential));
-    dto.setInvocationInstruction(SubscriptionMappingUtil.toInvocationInstructionDTO(instruction));
+    // 9. Build DTO and return (full credential with opaque body!)
+    FederatedSubscriptionInfoDTO dto = FederatedSubscriptionMappingUtil
+        .fromFederatedSubscriptionInfoToDTO(credential, api.getGatewayVendor(), gatewayEnvId);
 
     return Response.status(201).entity(dto).build();
 }
@@ -606,11 +596,15 @@ public FederatedCredential createSubscription(FederatedSubscriptionRequest reque
     SubscriptionKeysContract keys = manager.subscriptions()
         .listSecrets(resourceGroup, serviceName, subscription.name());
 
-    // Build credential (FULL key!)
+    // Build credential with opaque body (FULL key!)
+    JsonObject credBody = new JsonObject();
+    credBody.addProperty("credentialType", CREDENTIAL_TYPE);
+    credBody.addProperty("headerName", HEADER_NAME);
+    credBody.addProperty("value", keys.primaryKey());  // FULL value!
+
     FederatedCredential credential = new FederatedCredential();
-    credential.setCredentialType("opaque-api-key");
+    credential.setBody(gson.toJson(credBody));  // Opaque JSON string
     credential.setExternalSubscriptionId(subscription.name());
-    credential.setCredentialValue(keys.primaryKey());  // FULL value!
     credential.setValueRetrievable(true);
     credential.setMasked(false);
 
@@ -723,5 +717,5 @@ try {
 
 ## Related Documents
 
-- **Design Doc:** `.project/Universal Gateway.md` - High-level architecture and decisions
+- **Design Doc:** `.project/Universal DevPortal` - High-level architecture and decisions
 - **Repository Guide:** `CLAUDE.md` - Navigation and repo structure
