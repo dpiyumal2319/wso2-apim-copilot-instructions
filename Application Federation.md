@@ -1,3 +1,6 @@
+# !Deprecated
+See [Univeral Gateway Federation Documentation](Universal%20Gateway.md) for the latest architecture and implementation details.
+
 # Application Federation - Complete Documentation
 
 ## Table of Contents
